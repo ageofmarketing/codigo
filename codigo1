@@ -1,0 +1,253 @@
+<?php
+/*
+Plugin Name: Afiliados Grid
+Plugin URI: https://example.com
+Description: Um plugin que adiciona uma grade com imagem e texto abaixo de cada post do WordPress, com links de afiliados.
+Version: 1.0
+Author: Bing
+Author URI: https://www.bing.com
+License: GPL2
+*/
+
+// Criar uma classe para o plugin
+class Afiliados_Grid {
+
+    // Construtor da classe
+    public function __construct() {
+        // Adicionar ação para registrar o menu de configuração do plugin
+        add_action( 'admin_menu', array( $this, 'register_menu' ) );
+        // Adicionar ação para registrar as opções do plugin
+        add_action( 'admin_init', array( $this, 'register_settings' ) );
+        // Adicionar ação para exibir a grade de afiliados abaixo do conteúdo do post
+        add_filter( 'the_content', array( $this, 'display_grid' ) );
+    }
+
+    // Método para registrar o menu de configuração do plugin
+    public function register_menu() {
+        // Adicionar uma página de submenu na seção de configurações do WordPress
+        add_options_page(
+            'Afiliados Grid', // Título da página
+            'Afiliados Grid', // Título do menu
+            'manage_options', // Capacidade necessária para acessar a página
+            'afiliados-grid', // Slug da página
+            array( $this, 'render_menu' ) // Função de callback para renderizar a página
+        );
+    }
+
+    // Método para registrar as opções do plugin
+    public function register_settings() {
+        // Registrar uma seção de configurações na página do plugin
+        add_settings_section(
+            'afiliados_grid_section', // ID da seção
+            'Configurações do Afiliados Grid', // Título da seção
+            array( $this, 'render_section' ), // Função de callback para renderizar a seção
+            'afiliados-grid' // Slug da página onde a seção será exibida
+        );
+
+        // Registrar uma opção para a quantidade de links de afiliados que podem aparecer na grade
+        register_setting(
+            'afiliados_grid_options', // Grupo de opções onde a opção será salva
+            'afiliados_grid_quantity', // Nome da opção
+            array( // Argumentos para validar e sanitizar a opção
+                'type' => 'integer',
+                'sanitize_callback' => array( $this, 'sanitize_quantity' ),
+                'default' => 3,
+            )
+        );
+
+        // Adicionar um campo para a opção da quantidade de links de afiliados na seção do plugin
+        add_settings_field(
+            'afiliados_grid_quantity_field', // ID do campo
+            'Quantidade de links de afiliados', // Título do campo
+            array( $this, 'render_quantity_field' ), // Função de callback para renderizar o campo
+            'afiliados-grid', // Slug da página onde o campo será exibido
+            'afiliados_grid_section' // ID da seção onde o campo será exibido
+        );
+
+        // Registrar uma opção para os dados dos links de afiliados que serão exibidos na grade
+        register_setting(
+            'afiliados_grid_options', // Grupo de opções onde a opção será salva
+            'afiliados_grid_data', // Nome da opção
+            array( // Argumentos para validar e sanitizar a opção
+                'type' => 'array',
+                'sanitize_callback' => array( $this, 'sanitize_data' ),
+                'default' => array(),
+            )
+        );
+
+        // Adicionar um campo para a opção dos dados dos links de afiliados na seção do plugin
+        add_settings_field(
+            'afiliados_grid_data_field', // ID do campo
+            'Dados dos links de afiliados', // Título do campo
+            array( $this, 'render_data_field' ), // Função de callback para renderizar o campo
+            'afiliados-grid', // Slug da página onde o campo será exibido
+            'afiliados_grid_section' // ID da seção onde o campo será exibido
+        );
+    }
+
+    // Método para renderizar a seção de configurações do plugin
+    public function render_section() {
+        // Exibir uma descrição da seção
+        echo '<p>Nesta seção você pode configurar as opções do plugin Afiliados Grid.</p>';
+    }
+
+    // Método para renderizar o campo da opção da quantidade de links de afiliados
+    public function render_quantity_field() {
+        // Obter o valor da opção da quantidade de links de afiliados
+        $quantity = get_option( 'afiliados_grid_quantity' );
+        // Exibir um input do tipo number para a opção
+        echo '<input type="number" name="afiliados_grid_quantity" value="' . esc_attr( $quantity ) . '" min="1" max="9">';
+        // Exibir uma descrição do campo
+        echo '<p class="description">Escolha a quantidade de links de afiliados que podem aparecer na grade. O valor deve ser entre 1 e 9.</p>';
+    }
+
+    // Método para renderizar o campo da opção dos dados dos links de afiliados
+    public function render_data_field() {
+        // Obter o valor da opção dos dados dos links de afiliados
+        $data = get_option( 'afiliados_grid_data' );
+        // Exibir uma tabela com os campos para cada link de afiliado
+        echo '<table class="form-table">';
+        echo '<thead>';
+        echo '<tr>';
+        echo '<th>Imagem</th>';
+        echo '<th>Link</th>';
+        echo '<th>Texto</th>';
+        echo '</tr>';
+        echo '</thead>';
+        echo '<tbody>';
+        // Iterar sobre a quantidade de links de afiliados definida na opção correspondente
+        for ( $i = 0; $i < get_option( 'afiliados_grid_quantity' ); $i++ ) {
+            // Obter os valores dos campos para cada link de afiliado, se existirem
+            $image = isset( $data[$i]['image'] ) ? $data[$i]['image'] : '';
+            $link = isset( $data[$i]['link'] ) ? $data[$i]['link'] : '';
+            $text = isset( $data[$i]['text'] ) ? $data[$i]['text'] : '';
+            // Exibir uma linha na tabela com os campos para cada link de afiliado
+            echo '<tr>';
+            echo '<td>';
+            // Exibir um input do tipo hidden para armazenar o ID da imagem escolhida na galeria
+            echo '<input type="hidden" name="afiliados_grid_data[' . $i . '][image]" value="' . esc_attr( $image ) . '" class="afiliados-grid-image-id">';
+            // Exibir um botão para abrir a galeria do WordPress e escolher uma imagem
+            echo '<button type="button" class="button afiliados-grid-image-button">Escolher imagem</button>';
+            // Exibir um elemento img para mostrar a imagem escolhida na galeria
+            echo '<img src="' . esc_url( wp_get_attachment_url( $image ) ) . '" class="afiliados-grid-image-preview">';
+            echo '</td>';
+            echo '<td>';
+            // Exibir um input do tipo url para inserir o link de afiliado
+            echo '<input type="url" name="afiliados_grid_data[' . $i . '][link]" value="' . esc_url( $link ) . '" class="regular-text">';
+            echo '</td>';
+            echo '<td>';
+            // Exibir um input do tipo text para inserir o texto que será exibido abaixo da imagem
+            echo '<input type="text" name="afiliados_grid_data[' . $i . '][text]" value="' . esc_attr( $text ) . '" class="regular-text">';
+            echo '</td>';
+            echo '</tr>';
+        }
+        echo '</tbody>';
+        echo '</table>';
+        // Exibir uma descrição do campo
+        echo '<p class="description">Insira os dados dos links de afiliados que serão exibidos na grade. Você pode escolher uma imagem da galeria do WordPress, inserir um link de afiliado e inserir um texto que será exibido abaixo da imagem.</p>';
+    }
+
+    // Método para sanitizar a opção da quantidade de links de afiliados
+    public function sanitize_quantity( $input ) {
+        // Verificar se o valor do input é um número inteiro entre 1 e 9
+        if ( is_numeric( $input ) && $input >= 1 && $input <= 9 ) {
+            // Retornar o valor do input como inteiro
+            return intval( $input );
+        } else {
+            // Retornar o valor padrão da opção
+            return get_option( 'afiliados_grid_quantity' );
+        }
+    }
+
+    // Método para sanitizar a opção dos dados dos links de afiliados
+    public function sanitize_data( $input ) {
+        // Verificar se o valor do input é um array
+        if ( is_array( $input ) ) {
+            // Criar um array vazio para armazenar os dados sanitizados
+            $output = array();
+            // Iterar sobre cada elemento do array de input
+            foreach ( $input as $key => $value ) {
+                // Verificar se o elemento é um array com os campos image, link e text
+                if ( is_array( $value ) && isset( $value['image'] ) && isset( $value['link'] ) && isset( $value['text'] ) ) {
+                    // Sanitizar cada campo do elemento e adicionar ao array de output
+                    $output[$key]['image'] = sanitize_text_field( $value['image'] );
+                    $output[$key]['link'] = esc_url_raw( $value['link'] );
+                    $output[$key]['text'] = sanitize_text_field( $value['text'] );
+                }
+            }
+            // Retornar o array de output
+            return $output;
+        } else {
+            // Retornar o valor padrão da opção
+            return get_option( 'afiliados_grid_data' );
+        }
+    }
+
+    // Método para exibir a grade de afiliados abaixo do conteúdo do post
+    public function display_grid( $content ) {
+        // Verificar se estamos em um post singular e se há links de afiliados configurados na opção correspondente
+        if ( is_singular( 'post' ) && ! empty( get_option( 'afiliados_grid_data' ) ) ) {
+            // Obter os dados dos links de afiliados da opção correspondente
+            $data = get_option( 'afiliados_grid_data' );
+            // Criar uma variável para armazenar o HTML da grade de afiliados
+            $grid = '<div class="afiliados-grid">';
+            // Iterar sobre cada link de afiliado
+            foreach ( $data as $item ) {
+                // Obter os valores dos campos image, link e text de cada link de afiliado
+                $image = isset( $item['image'] ) ? wp_get_attachment_url( $item['image'] ) : '';
+                $link = isset( $item['link'] ) ? esc_url( $item['link'] ) : '';
+                $text = isset( $item['text'] ) ? esc_html( $item['text'] ) : '';
+                // Adicionar o HTML de cada link de afiliado à variável da grade
+                $grid .= '<div class="afiliados-grid-item">';
+                if ( ! empty( $image ) && ! empty( $link ) && ! empty( $text ) ) {
+                    // Se todos os campos estiverem preenchidos, exibir uma imagem clicável com um texto abaixo
+                    $grid .= '<a href="' . esc_url($link) . '" target="_blank" rel="noopener noreferrer">';
+                    $grid .= '<img src="' . esc_url($image) . '" alt="' . esc_attr($text) . '">';
+                    $grid .= '</a>';
+                    $grid .= '<h2>' . esc_html($text) . '</h2>';
+                } elseif ( ! empty( $image ) && ! empty( $link ) && empty( $text ) ) {
+                    // Se somente os campos image e link estiverem preenchidos, exibir somente uma imagem clicável
+                    $grid .= '<a href="' . esc_url($link) . '" target="_blank" rel="noopener noreferrer">';
+                    $grid .= '<img src="' . esc_url($image) . '" alt="">';
+                    $grid .= '</a>';
+                }
+            } elseif ( ! empty( $image ) && empty( $link ) && ! empty( $text ) ) {
+                // Se somente os campos image e text estiverem preenchidos, exibir somente uma imagem com um texto abaixo
+                $grid .= '<img src="' . esc_url($image) . '" alt="' . esc_attr($text) . '">';
+                $grid .= '<h2>' . esc_html($text) . '</h2>';
+            } elseif ( empty( $image ) && ! empty( $link ) && ! empty( $text ) ) {
+                // Se somente os campos link e text estiverem preenchidos, exibir somente um texto clicável
+                $grid .= '<a href="' . esc_url($link) . '" target="_blank" rel="noopener noreferrer">';
+                $grid .= '<h2>' . esc_html($text) . '</h2>';
+                $grid .= '</a>';
+            }
+            $grid .= '</div>';
+        }
+        $grid .= '</div>';
+        // Adicionar o HTML da grade de afiliados ao final do conteúdo do post
+        $content .= $grid;
+    }
+    // Retornar o conteúdo modificado
+    return $content;
+}
+
+// Método para adicionar scripts e estilos necessários para o plugin
+public function enqueue_scripts() {
+    // Verificar se estamos na página de configuração do plugin
+    if ( isset( $_GET['page'] ) && $_GET['page'] == 'afiliados-grid' ) {
+        // Registrar e enfileirar um script para lidar com a escolha da imagem na galeria do WordPress
+        wp_register_script( 'afiliados-grid-script', plugin_dir_url( __FILE__ ) . 'afiliados-grid-script.js', array( 'jquery', 'media-upload', 'media-views' ), '1.0', true );
+        wp_enqueue_script( 'afiliados-grid-script' );
+    }
+    // Registrar e enfileirar um estilo para estilizar a grade de afiliados no site
+    wp_register_style( 'afiliados-grid-style', plugin_dir_url( __FILE__ ) . 'afiliados-grid-style.css', array(), '1.0' );
+    wp_enqueue_style( 'afiliados-grid-style' );
+}
+}
+
+// Instanciar a classe do plugin
+$afiliados_grid = new Afiliados_Grid();
+
+// Adicionar ação para enfileirar scripts e estilos necessários para o plugin
+add_action( 'admin_enqueue_scripts', array( $afiliados_grid, 'enqueue_scripts' ) );
+add_action( 'wp_enqueue_scripts', array( $afiliados_grid, 'enqueue_scripts' ) );
